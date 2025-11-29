@@ -1,0 +1,60 @@
+{
+  "mcpVersion": "2025.11.1",
+  "server": {
+    "name": "ufro-orquestador",
+    "version": "1.0.0",
+    "description": "UFRO Orquestador MCP Server - Integrates PP2 identity verification and PP1 UFRO normativa chatbot",
+    "author": "UFRO Computer Science Department",
+    "homepage": "https://github.com/ufro/orquestador-mcp",
+    "license": "MIT"
+  },
+  "capabilities": {
+    "tools": [
+      {
+        "name": "identify_person", 
+        "description": "Identify a person from an image using PP2 verification services"
+      },
+      {
+        "name": "ask_normativa",
+        "description": "Ask questions about UFRO academic regulations using PP1 chatbot"
+      },
+      {
+        "name": "identify_and_answer", 
+        "description": "Combined operation: identify person from image AND answer normativa question"
+      },
+      {
+        "name": "get_metrics",
+        "description": "Retrieve analytics and usage metrics from the UFRO Orquestador"
+      },
+      {
+        "name": "health_check",
+        "description": "Check the health status of all UFRO Orquestador services"
+      }
+    ]
+  },
+  "runtime": {
+    "python": {
+      "executable": "python3",
+      "version": ">=3.9",
+      "requirements": [
+        "mcp>=1.21.0",
+        "aiohttp>=3.13.0",
+        "pydantic>=2.11.0"
+      ]
+    }
+  },
+  "configuration": {
+    "environment": {
+      "API_BASE_URL": {
+        "description": "Base URL for the UFRO Orquestador API",
+        "default": "http://35.168.3.175:8000",
+        "required": false
+      },
+      "MCP_SERVER_PORT": {
+        "description": "Port for the MCP server to listen on", 
+        "default": "8001",
+        "required": false
+      }
+    }
+  }
+}
