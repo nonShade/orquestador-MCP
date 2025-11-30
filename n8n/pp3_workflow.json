@@ -1,5 +1,5 @@
 {
-  "name": "UFRO Orquestador PP3 Workflow",
+  "name": "UFRO Orquestador PP3 Workflow - Corrected",
   "nodes": [
     {
       "parameters": {
@@ -13,7 +13,7 @@
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [320, 240]
+      "position": [100, 300]
     },
     {
       "parameters": {
@@ -41,7 +41,29 @@
       "name": "Check Image",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [520, 240]
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { error: 'No image provided', status: 400 } }}",
+        "responseCode": 400,
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "error-no-image",
+      "name": "Error: No Image",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [500, 180]
     },
     {
       "parameters": {
@@ -66,11 +88,90 @@
           }
         }
       },
-      "id": "pp2-verification",
-      "name": "PP2 Identity Verification",
+      "id": "pp2-verification-1",
+      "name": "PP2-1 Verification",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [720, 160]
+      "position": [600, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://98.94.200.223:5000/verify",
+        "sendBody": true,
+        "contentType": "form",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "image",
+              "value": "={{ $json.files.image.data }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "pp2-verification-2",
+      "name": "PP2-2 Verification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://example-pp2-3.com:5000/verify",
+        "sendBody": true,
+        "contentType": "form",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "image",
+              "value": "={{ $json.files.image.data }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "pp2-verification-3",
+      "name": "PP2-3 Verification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [600, 400]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "multiplex"
+      },
+      "id": "merge-pp2-results",
+      "name": "Merge PP2 Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const THRESHOLD = 0.75;\nconst MARGIN = 0.2;\n\n// Procesar todos los resultados de PP2\nconst items = $input.all();\nconst allCandidates = [];\n\n// Extraer candidatos de todas las respuestas PP2\nitems.forEach((item, index) => {\n  const data = item.json;\n  if (data && !data.error) {\n    if (data.candidates && Array.isArray(data.candidates)) {\n      allCandidates.push(...data.candidates);\n    } else if (data.name && data.score !== undefined) {\n      // Formato directo\n      allCandidates.push({ name: data.name, score: data.score, service: `PP2-${index+1}` });\n    } else if (data.is_me === true && data.score) {\n      // Otro formato posible\n      allCandidates.push({ name: `User-${index+1}`, score: data.score, service: `PP2-${index+1}` });\n    }\n  }\n});\n\n// Agrupar por nombre y tomar el mejor score\nconst candidateMap = {};\nallCandidates.forEach(candidate => {\n  const name = candidate.name;\n  if (!candidateMap[name] || candidateMap[name].score < candidate.score) {\n    candidateMap[name] = candidate;\n  }\n});\n\nconst finalCandidates = Object.values(candidateMap).sort((a, b) => b.score - a.score);\n\n// Aplicar lógica de fusión\nlet decision, identity, confidence;\n\nif (finalCandidates.length === 0) {\n  decision = 'unknown';\n  identity = null;\n  confidence = 0;\n} else {\n  const topCandidate = finalCandidates[0];\n  const secondCandidate = finalCandidates[1];\n  \n  if (topCandidate.score >= THRESHOLD) {\n    if (!secondCandidate || (topCandidate.score - secondCandidate.score) >= MARGIN) {\n      decision = 'identified';\n      identity = {\n        name: topCandidate.name,\n        score: topCandidate.score\n      };\n      confidence = topCandidate.score;\n    } else {\n      decision = 'ambiguous';\n      identity = {\n        name: topCandidate.name,\n        score: topCandidate.score\n      };\n      confidence = topCandidate.score - (secondCandidate ? secondCandidate.score : 0);\n    }\n  } else {\n    decision = 'unknown';\n    identity = null;\n    confidence = topCandidate.score;\n  }\n}\n\n// Agregar información original de entrada para el siguiente nodo\nconst originalData = items[0] ? items[0].json : {};\n\nreturn {\n  ...originalData,\n  pp2_results: {\n    decision: decision,\n    identity: identity,\n    candidates: finalCandidates.slice(0, 5),\n    confidence: confidence,\n    fusion_params: {\n      threshold: THRESHOLD,\n      margin: MARGIN\n    },\n    total_services: items.length,\n    successful_services: items.filter(item => item.json && !item.json.error).length\n  }\n};"
+      },
+      "id": "fusion-pp2",
+      "name": "Fusion PP2 Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 300]
     },
     {
       "parameters": {
@@ -98,7 +199,7 @@
       "name": "Check Question",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [520, 360]
+      "position": [1200, 300]
     },
     {
       "parameters": {
@@ -106,7 +207,7 @@
         "url": "http://98.94.200.223:5000/api/chat",
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ question: $json.query.question }) }}",
+        "body": "={{ JSON.stringify({ message: $json.query.question }) }}",
         "options": {
           "timeout": 15000,
           "response": {
@@ -120,31 +221,27 @@
       "name": "PP1 Normativa Query",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [720, 320]
+      "position": [1400, 250]
     },
     {
       "parameters": {
-        "mode": "combine",
-        "combineBy": "combineByPosition",
-        "options": {
-          "wait": 10000
-        }
+        "mode": "append"
       },
-      "id": "merge-results",
-      "name": "Merge Results",
+      "id": "merge-final-results",
+      "name": "Merge Final Results",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 2,
-      "position": [920, 240]
+      "position": [1600, 300]
     },
     {
       "parameters": {
-        "jsCode": "const THRESHOLD = 0.75;\nconst MARGIN = 0.2;\n\nfunction fuseIdentityResults(pp2Data) {\n  if (!pp2Data || pp2Data.error) {\n    return {\n      decision: 'unknown',\n      identity: null,\n      candidates: [],\n      confidence: 0\n    };\n  }\n\n  const candidates = pp2Data.candidates || [];\n  \n  if (candidates.length === 0) {\n    return {\n      decision: 'unknown',\n      identity: null,\n      candidates: [],\n      confidence: 0\n    };\n  }\n\n  const sortedCandidates = candidates.sort((a, b) => b.score - a.score);\n  const topCandidate = sortedCandidates[0];\n  const secondCandidate = sortedCandidates[1];\n\n  if (topCandidate.score >= THRESHOLD) {\n    if (!secondCandidate || (topCandidate.score - secondCandidate.score) >= MARGIN) {\n      return {\n        decision: 'identified',\n        identity: {\n          name: topCandidate.name,\n          score: topCandidate.score\n        },\n        candidates: sortedCandidates.slice(1, 4),\n        confidence: topCandidate.score\n      };\n    } else {\n      return {\n        decision: 'ambiguous',\n        identity: {\n          name: topCandidate.name,\n          score: topCandidate.score\n        },\n        candidates: sortedCandidates.slice(1, 4),\n        confidence: topCandidate.score - (secondCandidate ? secondCandidate.score : 0)\n      };\n    }\n  } else {\n    return {\n      decision: 'unknown',\n      identity: null,\n      candidates: sortedCandidates.slice(0, 3),\n      confidence: topCandidate.score\n    };\n  }\n}\n\nfunction processNormativaResults(pp1Data) {\n  if (!pp1Data || pp1Data.error) {\n    return {\n      text: null,\n      citations: [],\n      error: pp1Data ? pp1Data.error : 'No normativa data'\n    };\n  }\n\n  return {\n    text: pp1Data.answer || pp1Data.text || pp1Data.response || 'No answer provided',\n    citations: pp1Data.citations || pp1Data.sources || [],\n    confidence: pp1Data.confidence || 0.8\n  };\n}\n\nconst startTime = Date.now();\nconst items = $input.all();\nconst pp2Results = items[0] ? items[0].json : null;\nconst pp1Results = items[1] ? items[1].json : null;\n\nconst identityResult = fuseIdentityResults(pp2Results);\nconst normativaResult = pp1Results ? processNormativaResults(pp1Results) : null;\n\nconst response = {\n  request_id: Math.random().toString(36).substring(7),\n  timestamp: new Date().toISOString(),\n  decision: identityResult.decision,\n  identity: identityResult.identity,\n  candidates: identityResult.candidates,\n  normativa_answer: normativaResult,\n  timing_ms: Date.now() - startTime,\n  source: 'n8n-workflow',\n  fusion_params: {\n    threshold: THRESHOLD,\n    margin: MARGIN\n  }\n};\n\nreturn [response];"
+        "jsCode": "const startTime = Date.now();\nconst items = $input.all();\n\n// El primer item tiene los resultados de PP2 fusion\nconst pp2Data = items[0] ? items[0].json : {};\nconst pp2Results = pp2Data.pp2_results || {};\n\n// El segundo item (si existe) tiene los resultados de PP1\nlet pp1Results = null;\nif (items.length > 1 && items[1] && items[1].json && items[1].json.result) {\n  const pp1Data = items[1].json.result;\n  pp1Results = {\n    text: pp1Data.answer || 'No answer provided',\n    citations: pp1Data.sources || [],\n    confidence: pp1Data.metrics ? pp1Data.metrics.confidence : 0.8,\n    provider: pp1Data.provider || 'unknown'\n  };\n}\n\n// Construir respuesta final según especificación PP3\nconst response = {\n  request_id: Math.random().toString(36).substring(7),\n  timestamp: new Date().toISOString(),\n  decision: pp2Results.decision || 'unknown',\n  identity: pp2Results.identity || null,\n  candidates: pp2Results.candidates || [],\n  normativa_answer: pp1Results,\n  timing_ms: Date.now() - startTime,\n  source: 'n8n-workflow',\n  fusion_params: pp2Results.fusion_params || { threshold: 0.75, margin: 0.2 },\n  pp2_summary: {\n    queried: pp2Results.total_services || 0,\n    successful: pp2Results.successful_services || 0,\n    timeouts: (pp2Results.total_services || 0) - (pp2Results.successful_services || 0)\n  },\n  pp1_used: pp1Results !== null\n};\n\nreturn response;"
       },
-      "id": "fusion-engine",
-      "name": "Fusion Engine",
+      "id": "final-response",
+      "name": "Final Response Builder",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1120, 240]
+      "position": [1800, 300]
     },
     {
       "parameters": {
@@ -169,29 +266,7 @@
       "name": "Webhook Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1320, 160]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ { error: 'No image provided', status: 400 } }}",
-        "responseCode": 400,
-        "options": {
-          "responseHeaders": {
-            "entries": [
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
-          }
-        }
-      },
-      "id": "error-no-image",
-      "name": "Error: No Image",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [720, 80]
+      "position": [2000, 300]
     }
   ],
   "connections": {
@@ -202,11 +277,6 @@
             "node": "Check Image",
             "type": "main",
             "index": 0
-          },
-          {
-            "node": "Check Question",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -215,7 +285,17 @@
       "main": [
         [
           {
-            "node": "PP2 Identity Verification",
+            "node": "PP2-1 Verification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PP2-2 Verification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PP2-3 Verification",
             "type": "main",
             "index": 0
           }
@@ -223,6 +303,61 @@
         [
           {
             "node": "Error: No Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PP2-1 Verification": {
+      "main": [
+        [
+          {
+            "node": "Merge PP2 Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PP2-2 Verification": {
+      "main": [
+        [
+          {
+            "node": "Merge PP2 Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "PP2-3 Verification": {
+      "main": [
+        [
+          {
+            "node": "Merge PP2 Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge PP2 Results": {
+      "main": [
+        [
+          {
+            "node": "Fusion PP2 Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fusion PP2 Results": {
+      "main": [
+        [
+          {
+            "node": "Check Question",
             "type": "main",
             "index": 0
           }
@@ -237,14 +372,10 @@
             "type": "main",
             "index": 0
           }
-        ]
-      ]
-    },
-    "PP2 Identity Verification": {
-      "main": [
+        ],
         [
           {
-            "node": "Merge Results",
+            "node": "Merge Final Results",
             "type": "main",
             "index": 0
           }
@@ -255,25 +386,25 @@
       "main": [
         [
           {
-            "node": "Merge Results",
+            "node": "Merge Final Results",
             "type": "main",
             "index": 1
           }
         ]
       ]
     },
-    "Merge Results": {
+    "Merge Final Results": {
       "main": [
         [
           {
-            "node": "Fusion Engine",
+            "node": "Final Response Builder",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Fusion Engine": {
+    "Final Response Builder": {
       "main": [
         [
           {
@@ -292,20 +423,20 @@
   "staticData": null,
   "tags": [
     {
-      "createdAt": "2025-11-16T00:00:00.000Z",
-      "updatedAt": "2025-11-16T00:00:00.000Z",
-      "id": "ufro-orquestador",
-      "name": "UFRO Orquestador"
+      "createdAt": "2025-11-29T00:00:00.000Z",
+      "updatedAt": "2025-11-29T00:00:00.000Z",
+      "id": "ufro-orquestador-v2",
+      "name": "UFRO Orquestador V2"
     }
   ],
   "triggerCount": 1,
-  "updatedAt": "2025-11-16T00:00:00.000Z",
-  "versionId": "1.0.0",
+  "updatedAt": "2025-11-29T00:00:00.000Z",
+  "versionId": "2.0.0",
   "meta": {
-    "description": "UFRO Orquestador PP3 Workflow - N8N implementation for identity verification + normativa queries",
+    "description": "UFRO Orquestador PP3 Workflow - Fixed version with proper sequential flow and parallel PP2 calls",
     "author": "UFRO Computer Science Department",
-    "created": "2025-11-16T00:00:00.000Z",
-    "version": "1.0.0",
-    "tags": ["ufro", "identity", "normativa", "pp2", "pp1", "orquestador"]
+    "created": "2025-11-29T00:00:00.000Z",
+    "version": "2.0.0",
+    "tags": ["ufro", "identity", "normativa", "pp2", "pp1", "orquestador", "fixed"]
   }
 }
