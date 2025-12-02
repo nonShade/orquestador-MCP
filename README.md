@@ -25,8 +25,8 @@ Agente orquestador que integra verificación de identidad (PP2) y consultas de n
 ```bash
 git clone <repository>
 cd orquestador-MCP
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
