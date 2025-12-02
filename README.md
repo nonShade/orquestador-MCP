@@ -147,11 +147,6 @@ curl "http://localhost:8000/metrics/volume?days=7"
 curl "http://localhost:8000/metrics/pp2-timeouts?days=7"
 ```
 
-### Documentación de API
-
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
-
 ## MCP Server (Opcional)
 
 Para usar las herramientas MCP con LLMs:
@@ -327,9 +322,3 @@ docker-compose logs mongo-express
 4. **Services**: Performance PP1/PP2, timeouts, latencias
 5. **Volume**: Volumen por hora para análisis temporal
 6. **PP2 Timeouts**: Ranking de servicios por confiabilidad
-
-## Contacto
-
-**Desarrollado por**: UFRO Computer Science Department
-**Versión**: 1.0.0
-**Estado**: Completado y operativo
