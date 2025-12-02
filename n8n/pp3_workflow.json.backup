@@ -52,7 +52,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://98.85.101.140:5000/verify",
+         "url": "http://54.205.31.20:5000/verify",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -114,7 +114,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://98.94.200.223:5000/api/chat",
+         "url": "http://52.201.69.13:5000/api/chat",
         "sendBody": true,
         "contentType": "json",
         "body": "={{ JSON.stringify({ question: $json.query.question }) }}",

@@ -73,7 +73,7 @@ Editar `conf/registry.yaml` con tus servicios:
 ```yaml
 pp2_services:
   - name: "Tu Nombre"
-    endpoint_verify: "http://98.85.101.140:5000/verify"
+     endpoint_verify: "http://54.205.31.20:5000/verify"
     threshold: 0.75
     active: true
 ```

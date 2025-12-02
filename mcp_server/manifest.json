@@ -47,7 +47,7 @@
     "environment": {
       "API_BASE_URL": {
         "description": "Base URL for the UFRO Orquestador API",
-        "default": "http://35.168.3.175:8000",
+        "default": "http://44.214.75.160:8000",
         "required": false
       },
       "MCP_SERVER_PORT": {
