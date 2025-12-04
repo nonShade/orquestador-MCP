@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UFRO - Analizador de Identidad y Normativa</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #34495e;
+        }
+        input[type="file"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        .upload-area {
+            border: 2px dashed #3498db;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            background-color: #ecf0f1;
+            transition: background-color 0.3s;
+        }
+        .upload-area:hover {
+            background-color: #d5dbdb;
+        }
+        .btn {
+            background-color: #3498db;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin-top: 10px;
+        }
+        .btn:hover {
+            background-color: #2980b9;
+        }
+        .btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .results {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .result-section {
+            margin: 15px 0;
+        }
+        .result-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .identity-card {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .candidates {
+            background: #fff3cd;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .answer-box {
+            background: #d1ecf1;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 UFRO Orquestador</h1>
+            <p>Verificación de Identidad y Consultas de Normativa</p>
+        </div>
+
+        <form id="analysisForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="image">📷 Subir Imagen:</label>
+                <div class="upload-area">
+                    <input type="file" id="image" name="image" accept="image/*" required>
+                    <p>Haz clic aquí o arrastra una imagen</p>
+                    <small>Formatos permitidos: JPG, PNG, GIF (máx. 5MB)</small>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="question">❓ Pregunta sobre Normativa UFRO (opcional):</label>
+                <textarea 
+                    id="question" 
+                    name="question" 
+                    placeholder="Ej: ¿Cuáles son los requisitos para inscribir ramos?"
+                ></textarea>
+            </div>
+
+            <button type="submit" class="btn" id="submitBtn">
+                🚀 Analizar
+            </button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Procesando... Por favor espera</p>
+        </div>
+
+        <div class="results" id="results">
+            <!-- Los resultados se mostrarán aquí -->
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('analysisForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            
+            // Mostrar loading
+            submitBtn.disabled = true;
+            loading.style.display = 'block';
+            results.style.display = 'none';
+            
+            const formData = new FormData(this);
+            
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResults(data, 'success');
+                } else {
+                    showResults(data, 'error');
+                }
+                
+            } catch (error) {
+                showResults({error: 'Error de conexión: ' + error.message}, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                loading.style.display = 'none';
+            }
+        });
+        
+        function showResults(data, type) {
+            const results = document.getElementById('results');
+            results.className = `results ${type}`;
+            
+            if (type === 'error') {
+                results.innerHTML = `
+                    <div class="result-title">❌ Error</div>
+                    <p>${data.error || 'Error desconocido'}</p>
+                    ${data.details ? `<small>Detalles: ${data.details}</small>` : ''}
+                `;
+            } else {
+                let html = `<div class="result-title">✅ Análisis Completado</div>`;
+                
+                // Información de identidad
+                if (data.decision) {
+                    html += `
+                        <div class="result-section">
+                            <div class="result-title">🔍 Verificación de Identidad</div>
+                            <div class="identity-card">
+                                <strong>Decisión:</strong> ${getDecisionText(data.decision)}<br>
+                                ${data.identity ? 
+                                    `<strong>Persona Identificada:</strong> ${data.identity.name} (${Math.round(data.identity.score * 100)}% confianza)` 
+                                    : 'No se pudo identificar'
+                                }
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Candidatos
+                if (data.candidates && data.candidates.length > 0) {
+                    html += `
+                        <div class="result-section">
+                            <div class="result-title">👥 Candidatos Detectados</div>
+                            <div class="candidates">
+                    `;
+                    data.candidates.forEach(candidate => {
+                        html += `<div>• ${candidate.name}: ${Math.round(candidate.score * 100)}%</div>`;
+                    });
+                    html += `</div></div>`;
+                }
+                
+                // Respuesta normativa
+                if (data.normativa_answer) {
+                    html += `
+                        <div class="result-section">
+                            <div class="result-title">📚 Respuesta Normativa</div>
+                            <div class="answer-box">
+                                ${data.normativa_answer.text}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                // Información técnica
+                html += `
+                    <div class="result-section">
+                        <div class="result-title">⚙️ Información Técnica</div>
+                        <small>
+                            Tiempo de procesamiento: ${data.timing_ms}ms<br>
+                            ID de solicitud: ${data.request_id}<br>
+                            ${data.pp2_summary ? `PP2 consultados: ${data.pp2_summary.queried}, Timeouts: ${data.pp2_summary.timeouts}` : ''}
+                        </small>
+                    </div>
+                `;
+                
+                results.innerHTML = html;
+            }
+            
+            results.style.display = 'block';
+        }
+        
+        function getDecisionText(decision) {
+            switch(decision) {
+                case 'identified': return '✅ Identificado';
+                case 'ambiguous': return '⚠️ Ambiguo';
+                case 'unknown': return '❓ Desconocido';
+                default: return decision;
+            }
+        }
+
+        // Drag and drop functionality
+        const uploadArea = document.querySelector('.upload-area');
+        const fileInput = document.getElementById('image');
+
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '#d5dbdb';
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.style.backgroundColor = '#ecf0f1';
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.backgroundColor = '#ecf0f1';
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                uploadArea.style.backgroundColor = '#d4edda';
+                uploadArea.querySelector('p').textContent = `Archivo seleccionado: ${fileInput.files[0].name}`;
+            }
+        });
+    </script>
+</body>
+</html>
