@@ -1,0 +1,295 @@
+{
+  "name": "UFRO Orquestador PP3 Workflow - Fixed Response",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "identify-and-answer",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [320, 240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "rightValue": ""
+          },
+          "conditions": [
+            {
+              "id": "has-image",
+              "leftValue": "={{ ($json.body && $json.body.files && $json.body.files.image) }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "combineConditions": "any"
+      },
+      "id": "check-image",
+      "name": "Check Image",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [520, 240]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"error\": \"No image provided\", \"decision\": \"error\", \"message\": \"An image is required for identity verification\" } }}"
+      },
+      "id": "error-no-image",
+      "name": "Error: No Image",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [520, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert image data to binary format for file upload\n// Handle n8n webhook structure\nconsole.log('🔍 Webhook data keys:', Object.keys($json));\nconsole.log('📦 Full webhook data:', JSON.stringify($json, null, 2));\n\nlet imageData, mimeType, filename;\n\n// Extract from body.files.image structure (Flask app format)\nif ($json.body && $json.body.files && $json.body.files.image) {\n  const imageFile = $json.body.files.image;\n  imageData = imageFile.data;\n  mimeType = imageFile.mimeType || 'image/jpeg';\n  filename = imageFile.filename || 'image.jpg';\n  console.log('✅ Found image in body.files.image');\n  console.log('📷 Image info:', { filename, mimeType, dataLength: imageData ? imageData.length : 0 });\n} else {\n  console.log('❌ No image found in expected location');\n  console.log('Available paths:', {\n    hasBody: !!$json.body,\n    bodyKeys: $json.body ? Object.keys($json.body) : [],\n    hasFiles: !!($json.body && $json.body.files),\n    filesKeys: ($json.body && $json.body.files) ? Object.keys($json.body.files) : []\n  });\n  throw new Error('No image data found in webhook');\n}\n\n// Remove data URL prefix if present\nlet base64Data = imageData;\nif (imageData && typeof imageData === 'string' && imageData.startsWith('data:')) {\n  base64Data = imageData.split(',')[1];\n  console.log('🔧 Removed data URL prefix');\n}\n\n// Validate we have data\nif (!base64Data || base64Data.trim() === '') {\n  throw new Error('Image data is empty or invalid');\n}\n\nconsole.log('✅ Image conversion successful:', {\n  filename,\n  mimeType,\n  base64Length: base64Data.length\n});\n\n// Create binary data object for PP2 service\nreturn {\n  json: {\n    ...$json,\n    convertedImage: {\n      filename: filename,\n      mimeType: mimeType,\n      originalDataLength: imageData ? imageData.length : 0,\n      base64DataLength: base64Data ? base64Data.length : 0\n    }\n  },\n  binary: {\n    image: {\n      data: base64Data,\n      mimeType: mimeType,\n      fileName: filename\n    }\n  }\n};"
+      },
+      "id": "convert-image-data",
+      "name": "Convert Image Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://54.205.31.20:5000/verify",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "image",
+              "parameterType": "formBinaryData",
+              "inputDataFieldName": "image"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 8000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "pp2-verification",
+      "name": "PP2 Verification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [920, 240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "rightValue": ""
+          },
+          "conditions": [
+            {
+              "id": "has-question",
+              "leftValue": "={{ ($json.body && $json.body.question && $json.body.question.trim() !== '') }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "combineConditions": "any"
+      },
+      "id": "check-question",
+      "name": "Check Question",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [520, 80]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://52.201.69.13:5000/api/chat",
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ message: $json.body?.question || 'No question provided' }) }}",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "pp1-chat",
+      "name": "PP1 Chat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [720, 80]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1120, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final fusion logic for PP3 response\nconst THRESHOLD = 0.75;\n\n// Get merged data from the Merge node\nconst mergedData = $input.first().json;\nconsole.log('🔍 Fusion - merged data keys:', Object.keys(mergedData));\nconsole.log('📦 Fusion - full merged data:', JSON.stringify(mergedData, null, 2));\n\n// Initialize response structure\nlet decision = 'unknown';\nlet identity = null;\nlet candidates = [];\nlet normativaAnswer = null;\nlet confidence = 0;\nlet pp2Score = null;\n\n// Extract PP2 result - check if we have PP2 data\nlet pp2Result = null;\nif (mergedData.is_me !== undefined && mergedData.score !== undefined) {\n  pp2Result = mergedData;\n  console.log('✅ Found PP2 data:', {\n    is_me: pp2Result.is_me,\n    score: pp2Result.score,\n    model_version: pp2Result.model_version\n  });\n} else {\n  console.log('❌ No PP2 data found');\n}\n\n// Extract PP1 result\nlet pp1Result = null;\nif (mergedData.result && mergedData.result.answer) {\n  pp1Result = mergedData;\n  console.log('✅ Found PP1 data');\n} else {\n  console.log('ℹ️ No PP1 data (expected if no question)');\n}\n\n// Process PP2 identity verification\nif (pp2Result) {\n  const score = Number(pp2Result.score);\n  const isMe = Boolean(pp2Result.is_me);\n  pp2Score = score;\n  \n  console.log('🔢 Processing PP2:');\n  console.log('   Score:', score, '(type:', typeof score, ')');\n  console.log('   Is Me:', isMe, '(type:', typeof isMe, ')');\n  console.log('   Threshold:', THRESHOLD);\n  console.log('   Score >= Threshold:', score >= THRESHOLD);\n  console.log('   isMe === true:', isMe === true);\n  console.log('   Both conditions:', score >= THRESHOLD && isMe === true);\n  \n  // Decision logic\n  if (score >= THRESHOLD && isMe === true) {\n    decision = 'identified';\n    identity = {\n      name: 'Benjamin',\n      score: score\n    };\n    confidence = score;\n    console.log('🎯 DECISION: IDENTIFIED!');\n  } else if (score > 0.4) {\n    decision = 'ambiguous';\n    identity = {\n      name: 'Unknown',\n      score: score\n    };\n    confidence = score;\n    console.log('⚠️ DECISION: AMBIGUOUS');\n  } else {\n    decision = 'unknown';\n    identity = null;\n    confidence = 0;\n    console.log('❌ DECISION: UNKNOWN (low score)');\n  }\n  \n  // Add candidate with detailed metrics\n  candidates.push({\n    name: 'Benjamin',\n    score: score,\n    service: 'PP2-Benjamin',\n    model_version: pp2Result.model_version || 'unknown',\n    timing_ms: pp2Result.timing_ms || null,\n    threshold: pp2Result.threshold || THRESHOLD\n  });\n  \n  console.log('👤 Candidate added:', candidates[0]);\n} else {\n  console.log('❌ No PP2 result to process');\n}\n\n// Process PP1 normative answer (if any)\nif (pp1Result && pp1Result.result && pp1Result.result.answer) {\n  normativaAnswer = {\n    answer: pp1Result.result.answer,\n    sources: pp1Result.result.sources || [],\n    provider: pp1Result.result.provider || 'Unknown',\n    confidence: 0.9\n  };\n  console.log('📚 PP1 answer processed');\n}\n\n// Build final PP3 response\nconst pp3Response = {\n  decision: decision,\n  identity: identity,\n  candidates: candidates,\n  normativa_answer: normativaAnswer,\n  confidence: confidence,\n  timestamp: new Date().toISOString(),\n  services_used: {\n    pp2: pp2Result ? 'Benjamin' : null,\n    pp1: pp1Result ? 'UFRO Normativa Bot' : null\n  },\n  debug: {\n    pp2_score: pp2Result ? pp2Result.score : null,\n    pp2_is_me: pp2Result ? pp2Result.is_me : null,\n    pp2_timing_ms: pp2Result ? pp2Result.timing_ms : null,\n    pp2_model_version: pp2Result ? pp2Result.model_version : null,\n    pp2_threshold: pp2Result ? pp2Result.threshold : null,\n    pp1_status: pp1Result ? 'success' : 'not_executed',\n    threshold_check: pp2Score ? pp2Score >= THRESHOLD : 'no_data',\n    decision_made: decision\n  }\n};\n\nconsole.log('🚀 Final PP3 response:', JSON.stringify(pp3Response, null, 2));\nreturn pp3Response;"
+      },
+      "id": "fusion-results",
+      "name": "Fusion Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 160]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "final-response",
+      "name": "Final Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1520, 160]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check Image",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Image": {
+      "main": [
+        [
+          {
+            "node": "Convert Image Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error: No Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Image Data": {
+      "main": [
+        [
+          {
+            "node": "PP2 Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PP2 Verification": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Question": {
+      "main": [
+        [
+          {
+            "node": "PP1 Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PP1 Chat": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Fusion Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fusion Results": {
+      "main": [
+        [
+          {
+            "node": "Final Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-12-06T00:00:00.000Z",
+  "versionId": "fixed-webhook-response"
+}
