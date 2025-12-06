@@ -27,7 +27,7 @@
           "conditions": [
             {
               "id": "has-image",
-              "leftValue": "={{ ($json.body && $json.body.files && $json.body.files.image) }}",
+              "leftValue": "={{ ($json.body && (($json.body.body && $json.body.body.files && $json.body.body.files.image) || ($json.body.files && $json.body.files.image))) }}",
               "rightValue": "true",
               "operator": {
                 "type": "boolean",
@@ -57,7 +57,8 @@
     },
     {
       "parameters": {
-        "jsCode": "// Convert image data to binary format for file upload\n// Handle n8n webhook structure\nconsole.log('🔍 Webhook data keys:', Object.keys($json));\nconsole.log('📦 Full webhook data:', JSON.stringify($json, null, 2));\n\nlet imageData, mimeType, filename;\n\n// Extract from body.files.image structure (Flask app format)\nif ($json.body && $json.body.files && $json.body.files.image) {\n  const imageFile = $json.body.files.image;\n  imageData = imageFile.data;\n  mimeType = imageFile.mimeType || 'image/jpeg';\n  filename = imageFile.filename || 'image.jpg';\n  console.log('✅ Found image in body.files.image');\n  console.log('📷 Image info:', { filename, mimeType, dataLength: imageData ? imageData.length : 0 });\n} else {\n  console.log('❌ No image found in expected location');\n  console.log('Available paths:', {\n    hasBody: !!$json.body,\n    bodyKeys: $json.body ? Object.keys($json.body) : [],\n    hasFiles: !!($json.body && $json.body.files),\n    filesKeys: ($json.body && $json.body.files) ? Object.keys($json.body.files) : []\n  });\n  throw new Error('No image data found in webhook');\n}\n\n// Remove data URL prefix if present\nlet base64Data = imageData;\nif (imageData && typeof imageData === 'string' && imageData.startsWith('data:')) {\n  base64Data = imageData.split(',')[1];\n  console.log('🔧 Removed data URL prefix');\n}\n\n// Validate we have data\nif (!base64Data || base64Data.trim() === '') {\n  throw new Error('Image data is empty or invalid');\n}\n\nconsole.log('✅ Image conversion successful:', {\n  filename,\n  mimeType,\n  base64Length: base64Data.length\n});\n\n// Create binary data object for PP2 service\nreturn {\n  json: {\n    ...$json,\n    convertedImage: {\n      filename: filename,\n      mimeType: mimeType,\n      originalDataLength: imageData ? imageData.length : 0,\n      base64DataLength: base64Data ? base64Data.length : 0\n    }\n  },\n  binary: {\n    image: {\n      data: base64Data,\n      mimeType: mimeType,\n      fileName: filename\n    }\n  }\n};"
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Convert image data to binary format for file upload\n// Handle n8n webhook structure with nested body.body format\nconsole.log('🔍 Webhook data keys:', Object.keys($json));\nconsole.log('📦 Full webhook data:', JSON.stringify($json, null, 2));\n\nlet imageData, mimeType, filename;\n\n// Extract from nested body.body.files.image structure (Flask app format)\nif ($json.body && $json.body.body && $json.body.body.files && $json.body.body.files.image) {\n  const imageFile = $json.body.body.files.image;\n  imageData = imageFile.data;\n  mimeType = imageFile.mimeType || 'image/jpeg';\n  filename = imageFile.filename || 'image.jpg';\n  console.log('✅ Found image in body.body.files.image (nested structure)');\n  console.log('📷 Image info:', { filename, mimeType, dataLength: imageData ? imageData.length : 0 });\n} \n// Fallback: try body.files.image structure\nelse if ($json.body && $json.body.files && $json.body.files.image) {\n  const imageFile = $json.body.files.image;\n  imageData = imageFile.data;\n  mimeType = imageFile.mimeType || 'image/jpeg';\n  filename = imageFile.filename || 'image.jpg';\n  console.log('✅ Found image in body.files.image (flat structure)');\n  console.log('📷 Image info:', { filename, mimeType, dataLength: imageData ? imageData.length : 0 });\n} else {\n  console.log('❌ No image found in expected locations');\n  console.log('Available paths:', {\n    hasBody: !!$json.body,\n    bodyKeys: $json.body ? Object.keys($json.body) : [],\n    hasNestedBody: !!($json.body && $json.body.body),\n    nestedBodyKeys: ($json.body && $json.body.body) ? Object.keys($json.body.body) : [],\n    hasFiles: !!($json.body && $json.body.files),\n    hasNestedFiles: !!($json.body && $json.body.body && $json.body.body.files),\n    filesKeys: ($json.body && $json.body.files) ? Object.keys($json.body.files) : [],\n    nestedFilesKeys: ($json.body && $json.body.body && $json.body.body.files) ? Object.keys($json.body.body.files) : []\n  });\n  throw new Error('No image data found in webhook. Check the console logs for available paths.');\n}\n\n// Remove data URL prefix if present\nlet base64Data = imageData;\nif (imageData && typeof imageData === 'string' && imageData.startsWith('data:')) {\n  base64Data = imageData.split(',')[1];\n  console.log('🔧 Removed data URL prefix');\n}\n\n// Validate we have data\nif (!base64Data || base64Data.trim() === '') {\n  throw new Error('Image data is empty or invalid');\n}\n\nconsole.log('✅ Image conversion successful:', {\n  filename,\n  mimeType,\n  base64Length: base64Data.length\n});\n\n// Create binary data object for PP2 service\nreturn {\n  json: {\n    ...$json,\n    convertedImage: {\n      filename: filename,\n      mimeType: mimeType,\n      originalDataLength: imageData ? imageData.length : 0,\n      base64DataLength: base64Data ? base64Data.length : 0\n    }\n  },\n  binary: {\n    image: {\n      data: base64Data,\n      mimeType: mimeType,\n      fileName: filename\n    }\n  }\n};"
       },
       "id": "convert-image-data",
       "name": "Convert Image Data",
@@ -106,7 +107,7 @@
           "conditions": [
             {
               "id": "has-question",
-              "leftValue": "={{ ($json.body && $json.body.question && $json.body.question.trim() !== '') }}",
+              "leftValue": "={{ ($json.body && (($json.body.body && $json.body.body.question && $json.body.body.question.trim() !== '') || ($json.body.question && $json.body.question.trim() !== ''))) }}",
               "rightValue": "true",
               "operator": {
                 "type": "boolean",
@@ -129,7 +130,7 @@
         "url": "http://52.201.69.13:5000/api/chat",
         "sendBody": true,
         "contentType": "json",
-        "body": "={{ JSON.stringify({ message: $json.body?.question || 'No question provided' }) }}",
+        "body": "={{ JSON.stringify({ message: ($json.body?.body?.question || $json.body?.question || 'No question provided') }) }}",
         "options": {
           "timeout": 15000,
           "response": {
